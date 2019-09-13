@@ -29,3 +29,13 @@ codegen/
 
 # Octave session info
 octave-workspace
+
+# Temporary files of the game
+resources/linkgame/plugin
+resources/linkgame/auto_click.ini
+resources/linkgame/cfgdll.dll
+resources/linkgame/steps.txt
+resources/process/plugin
+resources/process/auto_click.ini
+resources/process/cfgdll.dll
+resources/process/steps.txt
