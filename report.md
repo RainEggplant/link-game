@@ -255,3 +255,120 @@ end
 
 以上代码位于 `src/linkgame/omg.m`, 为了能进行测试，我在 `resources/linkgame` 下建立了符号链接，并将 `omg.p` 更名为 `omg.p.example` 。运行 `linkgame.p` 测试一局自动模式，算法正确。
 
+
+
+## 攻克别人的连连看
+
+### 1. 提取游戏截图（灰度）的分块
+
+因为背景（水平、竖直线）的周期明显，而图案的周期性不明显，所以我们可以对所有的水平线或竖直线上的灰度值取均值，以去除各行数据上的随机性影响。
+
+因此写出代码：
+
+```matlab
+% 求水平方向的平均灰度值，并反色以便寻峰
+row_avg = 255-mean(img, 1);
+figure;
+plot(row_avg);
+title('反色后的平均灰度值（水平）');
+```
+
+结果如下：
+
+![](report.assets/process/1-row_avg.png)
+
+可见，每条分割线对应了非常突出的峰值。因此，我们使用 `findpeaks` 函数就可轻松得到结果。
+
+因此写出代码，
+
+```matlab
+% 寻峰，获得垂直分割线坐标
+[~, col_locs] = findpeaks(row_avg, 'MinPeakProminence', 128);
+n_col = length(col_locs)-1;
+```
+
+
+
+对垂直方向进行相同操作。
+
+![](report.assets/process/1-col_avg.png)
+
+
+
+最终，我们获得了水平分割线条数 `n_row`, 垂直坐标 `row_locs`, 垂直分割线条数 `n_col`, 垂直坐标 `col_locs`。因此，编写代码对图像进行分割：
+
+```matlab
+% 输出分割后的图像
+figure('Position',  [200 200 500 400]);
+idx = 1;
+for row = 1:n_row    
+	for col = 1:n_col
+		subplot(n_row, n_col, idx);
+        imshow(img(row_locs(row):row_locs(row+1)-1, ...
+        col_locs(col):col_locs(col+1)-1));
+        idx = idx+1;
+	end
+end    
+```
+
+
+
+结果如下：
+
+![](report.assets/process/1-segmentation.png)
+
+可见效果非常好。
+
+
+
+### 2. 提取摄像头拍摄的图像（灰度）分块
+
+因为原始图像对比度不够，为了方便处理，先对图像进行二值化。
+
+```matlab
+img_b = imbinarize(img, 0.8);
+```
+
+效果如下：
+
+![](report.assets/process/2-image_bin.png)
+
+然后再采用 1 中的办法。
+
+反色后的平均灰度值（水平）结果如下：
+
+![](report.assets/process/2-row_avg.png)
+
+反色后的平均灰度值（垂直）结果如下：
+
+![](report.assets/process/2-col_avg.png)
+
+仍然调用 `findpeaks` 函数寻峰。但是这里需要额外关注一下函数参数。
+
+```matlab
+[~, col_locs] = findpeaks(row_avg, 'MinPeakProminence', 0.3, ...
+        'MaxPeakWidth', 10);
+[~, row_locs] = findpeaks(col_avg, 'MinPeakProminence', 0.3, ...
+        'MaxPeakWidth', 10);
+```
+
+边框处和周围的对比是很明显的，而图案形成的峰没有这种性质，因此要求 `MinPeakProminence = 0.3`。同时，边框的宽度很窄，而图案形成的峰也没有这种性质，因此要求 `MaxPeakWidth = 10`。这样我们就可以选出边框对应的峰值了。
+
+
+
+最后分割结果如下：
+
+![](report.assets/process/2-segmentation.png)
+
+可见效果仍然不错。
+
+
+
+#### 注：
+
+在处理 1、2 问时，我并没有使用老师提到的傅里叶变换的方式，而是在原域进行处理。这样做有以下优点：
+
+- 相对傅里叶变换而言，运算量更少。
+- 应对具有轻微透视变形的图像效果更好。原因是傅里叶变换只能得到基频和相位，即对应图像块的尺寸和最边上的偏移量。但是对于具有透视变形的图像，其图像块尺寸并不均匀。如果以固定尺寸去分割，不能保证每一块都分割地合适，同时误差可能会有累积效应（例如图像块左小右大，那么在从左向右分割时，图像块大小达到平均前误差都在持续积累）。
+- 选用合适的阈值对图像进行二值化可明显地减小噪声影响。
+
