@@ -20,7 +20,6 @@ function segment_screenshot()
     % 寻峰，获得水平分割线坐标
     [~, row_locs] = findpeaks(col_avg, 'MinPeakProminence', 128);
     n_row = length(row_locs)-1;
-    row_width = (row_locs(end)-row_locs(1))/n_row;
     
     % 输出分割后的图像
     figure('Position',  [200 200 500 400]);
