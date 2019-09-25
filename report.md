@@ -566,3 +566,176 @@ corrs = sortrows(corrs, 'descend');
 
 看来程序觉得小锯鳄和妙蛙种子长得比较像，这对 CP 十次里出现了 7 次。但从我的主观感受上来看，二者并没有那么像，只是角度比较一致。另外一对 CP 波波和绿毛虫也出现了 3 次，我也觉得他们角度比较一致，然后尾巴处都有一团灰色的东西。
 
+
+
+### 5. 分类图像块，将游戏区域映射为索引矩阵
+
+思路如下：按相关系数从高往低，利用配对信息，将图案归类。第一次处理后，还存在一种图案对应多个 `patterns` 的现象。第二次处理会将相同的 `pattern` 合并，并更新游戏索引矩阵。 
+
+代码如下：（文件位于 `src/process/map_to_matrix.m`）
+
+```matlab
+function [game_mat, patterns] = map_to_matrix(mat_size, corrs)
+    game_mat = zeros(mat_size);
+    patterns = {};
+    
+    % 优先使用相关系数高的数据进行归类
+    for k = 1:length(corrs)
+        p1 = corrs(k, 2);
+        p2 = corrs(k, 3);
+        mapped = false;
+        
+        for m = 1:length(patterns)
+            if any(patterns{m} == p1)
+                game_mat(p2) = m;
+                patterns{m}(end+1) = p2;
+                mapped = true;
+                break;
+            elseif any(patterns{m} == p2)
+                game_mat(p1) = m;
+                patterns{m}(end+1) = p1;
+                mapped = true;
+                break;
+            end
+        end
+        
+        if ~mapped
+           patterns{end+1} = [p1, p2];
+           game_mat(p1) = length(patterns);
+           game_mat(p2) = length(patterns);  
+        end
+        
+        % 每一块均已归类，即可结束
+        if all(game_mat(:))
+            break; 
+        end
+    end
+    
+    % 合并相同的 pattern
+    for k = 1:max([patterns{:}])
+        contains_k = [cellfun(@(x) any(x==k), patterns)];
+        if any(contains_k)
+            idx = find(contains_k);
+            patterns{idx(1)} = unique([patterns{idx}]);
+            patterns(idx(2:end)) = [];
+            game_mat(patterns{idx(1)}) = idx(1);
+        end
+    end
+end
+```
+
+
+
+矩阵 `game_mat` 如下，与游戏显示的位置是一致的：
+
+<table>
+ <tr>
+  <td>8</td>
+  <td>14</td>
+  <td>8</td>
+  <td>3</td>
+  <td>11</td>
+  <td>19</td>
+  <td>6</td>
+  <td>13</td>
+  <td>1</td>
+  <td>5</td>
+  <td>5</td>
+  <td>12</td>
+ </tr>
+ <tr>
+  <td>9</td>
+  <td>3</td>
+  <td>12</td>
+  <td>7</td>
+  <td>12</td>
+  <td>4</td>
+  <td>1</td>
+  <td>18</td>
+  <td>5</td>
+  <td>19</td>
+  <td>18</td>
+  <td>1</td>
+ </tr>
+ <tr>
+  <td>10</td>
+  <td>2</td>
+  <td>5</td>
+  <td>19</td>
+  <td>7</td>
+  <td>9</td>
+  <td>6</td>
+  <td>7</td>
+  <td>14</td>
+  <td>6</td>
+  <td>10</td>
+  <td>9</td>
+ </tr>
+ <tr>
+  <td>7</td>
+  <td>2</td>
+  <td>1</td>
+  <td>7</td>
+  <td>14</td>
+  <td>1</td>
+  <td>6</td>
+  <td>3</td>
+  <td>6</td>
+  <td>9</td>
+  <td>7</td>
+  <td>10</td>
+ </tr>
+ <tr>
+  <td>18</td>
+  <td>14</td>
+  <td>18</td>
+  <td>11</td>
+  <td>2</td>
+  <td>5</td>
+  <td>2</td>
+  <td>5</td>
+  <td>4</td>
+  <td>13</td>
+  <td>7</td>
+  <td>3</td>
+ </tr>
+ <tr>
+  <td>10</td>
+  <td>1</td>
+  <td>16</td>
+  <td>10</td>
+  <td>8</td>
+  <td>16</td>
+  <td>10</td>
+  <td>13</td>
+  <td>11</td>
+  <td>4</td>
+  <td>13</td>
+  <td>1</td>
+ </tr>
+ <tr>
+  <td>4</td>
+  <td>1</td>
+  <td>6</td>
+  <td>5</td>
+  <td>11</td>
+  <td>19</td>
+  <td>12</td>
+  <td>8</td>
+  <td>4</td>
+  <td>5</td>
+  <td>7</td>
+  <td>4</td>
+ </tr>
+</table>
+
+
+
+调用 `print_legend(segments, patterns)`（文件位于 `src/process/print_legend.m`）, 输出图例如下：
+
+![](report.assets/process/5-print_legend.png)
+
+
+
+我们成功的将每一块图案映射为矩阵中的索引。
+
