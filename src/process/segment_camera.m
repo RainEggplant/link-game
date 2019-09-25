@@ -1,6 +1,6 @@
 function segment_camera()
     img = imread('../../resources/process/graycapture.jpg');
-
+    
     % 二值化图像，以滤去噪声，增强对比度
     img_b = imbinarize(img, 0.8);
     % 求水平方向的平均灰度值，并反色以便寻峰

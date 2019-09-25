@@ -261,6 +261,8 @@ end
 
 ### 1. 提取游戏截图（灰度）的分块
 
+> 本节代码位于 `src/process/segment_screenshot.m`
+
 因为背景（水平、竖直线）的周期明显，而图案的周期性不明显，所以我们可以对所有的水平线或竖直线上的灰度值取均值，以去除各行数据上的随机性影响。
 
 因此写出代码：
@@ -323,6 +325,8 @@ end
 
 ### 2. 提取摄像头拍摄的图像（灰度）分块
 
+> 本节代码位于 `src/process/segment_camera.m`
+
 因为原始图像对比度不够，为了方便处理，先对图像进行二值化。
 
 ```matlab
@@ -352,7 +356,7 @@ img_b = imbinarize(img, 0.8);
         'MaxPeakWidth', 10);
 ```
 
-边框处和周围的对比是很明显的，而图案形成的峰没有这种性质，因此要求 `MinPeakProminence = 0.3`。同时，边框的宽度很窄，而图案形成的峰也没有这种性质，因此要求 `MaxPeakWidth = 10`。这样我们就可以选出边框对应的峰值了。
+因为边框处和周围的对比是很明显的，而图案形成的峰没有这种性质，所以要求 `MinPeakProminence = 0.3`。同时，边框的宽度很窄，而图案形成的峰也没有这种性质，因此要求 `MaxPeakWidth = 10`。这样我们就可以选出边框对应的峰值了。
 
 
 
@@ -366,9 +370,199 @@ img_b = imbinarize(img, 0.8);
 
 #### 注：
 
-在处理 1、2 问时，我并没有使用老师提到的傅里叶变换的方式，而是在原域进行处理。这样做有以下优点：
+在处理 1、2 问时，我曾经尝试使用老师提到的傅里叶变换的方式，但是最后的结果却没有现在的好。稍作分析，现在的方式有以下优点：
 
 - 相对傅里叶变换而言，运算量更少。
 - 应对具有轻微透视变形的图像效果更好。原因是傅里叶变换只能得到基频和相位，即对应图像块的尺寸和最边上的偏移量。但是对于具有透视变形的图像，其图像块尺寸并不均匀。如果以固定尺寸去分割，不能保证每一块都分割地合适，同时误差可能会有累积效应（例如图像块左小右大，那么在从左向右分割时，图像块大小达到平均前误差都在持续积累）。
 - 选用合适的阈值对图像进行二值化可明显地减小噪声影响。
+
+
+
+最后我们将这两节的思路整合，定义函数 `segment_image` （位于 `src/process/segment_image.m`）, 参数如下：
+
+```matlab
+function segments = segment_image(...
+    img, BinThreshold, MinPeakProminence, MaxPeakWidth)
+```
+
+| 参数              | 描述                    |
+| ----------------- | ----------------------- |
+| img               | 图像矩阵                |
+| BinThreshold      | 二值化阈值, 取值 [0, 1] |
+| MinPeakProminence | 峰值最小的突出程度      |
+| MaxPeakWidth      | 峰值最大的宽度          |
+
+返回值 `segments` 是一个 m$\times$n 维元胞数组，对应分割后的每一块图像。
+
+
+
+### 3.  计算所有图像分块的两两相似性
+
+#### 设计二维高通滤波器
+
+> 本节代码位于 `src/process/filter_high_pass.m`
+
+直观地看，每个图像分块区别于其他图像分块的重要特征是纹理。为了凸显纹理，可以用高通滤波器去除图像中缓慢变化的部分。
+
+首先，我们先设计一个一维的高通滤波器。
+
+```matlab
+filter_1d = fir1(order, freq, 'high');
+```
+
+其单位样值响应如下（`order=20, freq=0.35`) :
+
+![](report.assets/process/3-filter_1d.png)
+
+然后，我们旋转该样值响应，得到二维的高通滤波器。
+
+```matlab
+mid = order/2+1;
+d_square_max = (mid-1)^2;
+    
+% “旋转”一维滤波器，构造二维高通
+filter_2d = zeros(order+1, order+1);
+for x = 1:order+1
+	for y = 1:order+1
+		d_square = (x-mid)^2+(y-mid)^2;
+		if d_square <= d_square_max
+			filter_2d(x, y) = filter_1d(mid-round(sqrt(d_square)));
+		end
+	end
+end
+```
+
+二维高通滤波器的响应如下：
+
+![](report.assets/process/3-filter_2d.png)
+
+
+
+加入直流分量，让我们看一看滤波前后的对比效果：
+
+<img src="report.assets/process/3-original_high_pass_compare_2.png" style="zoom:50%" />
+
+<img src="report.assets/process/3-original_high_pass_compare.png" style="zoom:50%" />
+
+可见，该滤波器的确提取除了图像的纹理信息。
+
+
+
+#### 计算相关系数
+
+> 本节代码位于 `src/process/calc_corrs.m`
+
+得到二维高通滤波器后，我们先对所有图像块进行高通滤波。
+
+```matlab
+filter_2d = filter_high_pass(order, freq);
+segments_hf = cellfun(@(x) filter2(filter_2d, x, 'same'), ...
+   segments, 'UniformOutput', false);
+```
+
+然后逐一计算相关系数，
+
+```matlab
+n_segments = numel(segments_hf);
+corrs = zeros(n_segments*(n_segments-1)/2, 3);
+idx = 1;
+for k = 1:numel(segments_hf)-1
+	for m = k+1:numel(segments_hf)
+		img1 = segments_hf{k};
+		img2 = segments_hf{m};
+		img1_s = img1(edge_cut:end-edge_cut, edge_cut:end-edge_cut);
+        img2_s = img2(edge_cut:end-edge_cut, edge_cut:end-edge_cut);
+        c1 = normxcorr2(img1_s, img2);
+        c2 = normxcorr2(img2_s, img1);
+		corrs(idx, :) = [max(max(c1(:)), max(c2(:))), k, m];
+		idx = idx+1;
+	end
+end
+
+corrs = sortrows(corrs, 'descend'); 
+```
+
+需要注意的是，由于图像块尺寸大小不完全一致，同时分割时还可能包含部分边框，我们采用了如下方式处理：选择两块图像中的一块，先切除一定宽度的边沿，然后将被切除的图像块作为模板滑动计算相关；再选择另一块做同样的操作。然后，取所有相关系数的最大值作为结果。
+
+在解决本问的过程中，最开始我采用通过 `padarray` 扩大图像来解决图像大小不一，导致无法使用 `normxcorr2` 函数的问题。但是我忽略了边框对于相关的影响，最后的结果并不理想。最后采用上面的方式，结果还是很令人满意的。
+
+
+
+#### 测试不同参数下的相关系数分布和正确性
+
+为了便于比对图像，我编写了图形界面如下：
+
+> 该图形界面对应文件：`src/process/show_matches_gui.m`, `src/process/show_matches_gui.fig`
+
+![](report.assets/process/3-show_matches_gui.png)
+
+
+
+该窗口从工作区读取图像分块 `segments` 和相关系数信息 `corrs`, 展示每一对图像以及编号、相关系数等，支持上下翻页和跳转。
+
+
+
+我们采用摄像头取得的图像，测试不同参数下的相关系数分布和正确性：
+
+- 不进行高通滤波
+
+  ![](report.assets/process/3-no_high_pass_filter.png)
+
+  经检查，相关系数最大的前 182 对均正确配对，实际上，这已经涵盖了所有正确的配对。并且，最后一对正确配对与下一对的相关系数为 0.8304 和 0.8002，变化比较陡峭。从相关系数整体来看，区分度也不错。
+
+  
+
+- `calc_corrs(segments, 20, 0.2, 5)`
+
+  ![](report.assets/process/3-high_pass_0.2_20.png)
+
+  经检查，程序也正确地完成了所有的配对。但是，最后一对正确配对与下一对的相关系数为 0.8742 和 0.8562，变化没有那么陡峭了。从相关系数整体来看，区分度也没有前一种好。
+
+
+
+- `calc_corrs(segments, 20, 0.35, 5)`
+
+  ![](report.assets/process/3-high_pass_0.35_20.png)
+
+  经检查，程序正确地完成了所有的配对。最后一对正确配对与下一对的相关系数为 0.7448 和 0.6984，变化非常陡峭。从相关系数整体来看，区分度也非常好。
+
+
+
+- `calc_corrs(segments, 20, 0.5, 5)`
+
+  ![](report.assets/process/3-high_pass_0.5_20.png)
+
+  经检查，前 181 项程序均正确配对，但第 182 项出现了错误。不过从相关系数整体来看，区分度是比较好的。
+
+
+
+综上所述，我们得出如下结论：
+
+- 不采用高通滤波的图像因为含有完整的信息，也能起到较好的效果。
+- 采用高通滤波时，截止频率的选取非常关键：
+  - 若截止频率过低，则不能有效地提取图形纹理，反而可能因为损失部分图像信息，造成区分度和准确性下降。
+  - 若截止频率过高，则会因为滤除了太多有效信息，导致区分度和准确性下降。
+  - 只有截止频率适合时，才能提高区分度与准确性。
+
+在本例中，采用 `order=20, freq=0.35` 是非常合适的。
+
+
+
+#### 展示最相似的十对图像块
+
+> 本节代码位于 `src/process/show_matches.m`
+
+调用 `show_matches(segments, corrs, 0)` 即可输出。
+
+![](report.assets/process/3-matches_correct.png)
+
+
+
+### 4. 展示相似度最大但不是同一种精灵的十对图像块
+
+先前已经通过 GUI 程序得到所有不是同一种精灵的匹配出现在第 182 项以后。故调用 `show_matches(segments, corrs, 182)` 即可输出结果。
+
+![](report.assets/process/3-matches_incorrect.png)
+
+看来程序觉得小锯鳄和妙蛙种子长得比较像，这对 CP 十次里出现了 7 次。但从我的主观感受上来看，二者并没有那么像，只是角度比较一致。另外一对 CP 波波和绿毛虫也出现了 3 次，我也觉得他们角度比较一致，然后尾巴处都有一团灰色的东西。
 
