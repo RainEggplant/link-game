@@ -14,7 +14,7 @@
 
 
 
-### 2. 实现检测块是否消除的 `detect.m`
+### 2. 实现检测块是否可消除的 `detect.m`
 
 连连看可消除的模式如下：
 
@@ -381,7 +381,7 @@ img_b = imbinarize(img, 0.8);
 最后我们将这两节的思路整合，定义函数 `segment_image` （位于 `src/process/segment_image.m`）, 参数如下：
 
 ```matlab
-function segments = segment_image(...
+function [segments, segment_locs] = segment_image(...
     img, BinThreshold, MinPeakProminence, MaxPeakWidth)
 ```
 
@@ -392,7 +392,7 @@ function segments = segment_image(...
 | MinPeakProminence | 峰值最小的突出程度      |
 | MaxPeakWidth      | 峰值最大的宽度          |
 
-返回值 `segments` 是一个 m$\times$n 维元胞数组，对应分割后的每一块图像。
+返回值 `segments` 是一个 m$\times$n 维元胞数组，对应分割后的每一块图像。`segment_locs` 为每块图像的位置信息，为 ``[left bottom width height]` ` 形式的四元素向量。
 
 
 
@@ -444,7 +444,7 @@ end
 
 <img src="report.assets/process/3-original_high_pass_compare.png" style="zoom:50%" />
 
-可见，该滤波器的确提取除了图像的纹理信息。
+可见，该滤波器的确提取出了图像的纹理信息。
 
 
 
@@ -484,7 +484,7 @@ corrs = sortrows(corrs, 'descend');
 
 需要注意的是，由于图像块尺寸大小不完全一致，同时分割时还可能包含部分边框，我们采用了如下方式处理：选择两块图像中的一块，先切除一定宽度的边沿，然后将被切除的图像块作为模板滑动计算相关；再选择另一块做同样的操作。然后，取所有相关系数的最大值作为结果。
 
-在解决本问的过程中，最开始我采用通过 `padarray` 扩大图像来解决图像大小不一，导致无法使用 `normxcorr2` 函数的问题。但是我忽略了边框对于相关的影响，最后的结果并不理想。最后采用上面的方式，结果还是很令人满意的。
+在解决本问的过程中，最开始我采用通过 `padarray` 扩大图像来解决图像大小不一导致无法使用 `normxcorr2` 函数的问题。但是我忽略了边框对于相关的影响，最后的结果并不理想。最后采用上面的方式，结果还是很令人满意的。
 
 
 
@@ -570,17 +570,22 @@ corrs = sortrows(corrs, 'descend');
 
 ### 5. 分类图像块，将游戏区域映射为索引矩阵
 
-思路如下：按相关系数从高往低，利用配对信息，将图案归类。第一次处理后，还存在一种图案对应多个 `patterns` 的现象。第二次处理会将相同的 `pattern` 合并，并更新游戏索引矩阵。 
+思路如下：按相关系数从高往低，利用给定相关系数阈值以上的配对信息，将图案归类（若信息不足将忽略阈值尝试分类）。第一次处理后，还存在一种图案对应多个 `patterns` 的现象。第二次处理会将相同的 `pattern` 合并，然后更新游戏索引矩阵。 
 
 代码如下：（文件位于 `src/process/map_to_matrix.m`）
 
 ```matlab
-function [game_mat, patterns] = map_to_matrix(mat_size, corrs)
+function [game_mat, patterns] = map_to_matrix(mat_size, corrs, threshold)
     game_mat = zeros(mat_size);
     patterns = {};
     
     % 优先使用相关系数高的数据进行归类
     for k = 1:length(corrs)
+        % 相关系数已低于阈值，并且每一块已被检测过时，结束归类
+        if corrs(k,1) < threshold && all(game_mat(:))
+            break; 
+        end
+        
         p1 = corrs(k, 2);
         p2 = corrs(k, 3);
         mapped = false;
@@ -604,22 +609,20 @@ function [game_mat, patterns] = map_to_matrix(mat_size, corrs)
            game_mat(p1) = length(patterns);
            game_mat(p2) = length(patterns);  
         end
-        
-        % 每一块均已归类，即可结束
-        if all(game_mat(:))
-            break; 
-        end
     end
     
     % 合并相同的 pattern
     for k = 1:max([patterns{:}])
-        contains_k = [cellfun(@(x) any(x==k), patterns)];
-        if any(contains_k)
-            idx = find(contains_k);
+        idx = find(cellfun(@(x) any(x==k), patterns));
+        if length(idx) > 1
             patterns{idx(1)} = unique([patterns{idx}]);
             patterns(idx(2:end)) = [];
-            game_mat(patterns{idx(1)}) = idx(1);
         end
+    end
+    
+    % 利用新的 pattern 编号更新索引矩阵
+    for k = 1:length(patterns)
+       game_mat(patterns{k}) = k; 
     end
 end
 ```
@@ -635,7 +638,7 @@ end
   <td>8</td>
   <td>3</td>
   <td>11</td>
-  <td>19</td>
+  <td>17</td>
   <td>6</td>
   <td>13</td>
   <td>1</td>
@@ -651,7 +654,7 @@ end
   <td>12</td>
   <td>4</td>
   <td>1</td>
-  <td>18</td>
+  <td>16</td>
   <td>5</td>
   <td>19</td>
   <td>18</td>
@@ -688,7 +691,7 @@ end
  <tr>
   <td>18</td>
   <td>14</td>
-  <td>18</td>
+  <td>16</td>
   <td>11</td>
   <td>2</td>
   <td>5</td>
@@ -702,10 +705,10 @@ end
  <tr>
   <td>10</td>
   <td>1</td>
-  <td>16</td>
+  <td>15</td>
   <td>10</td>
   <td>8</td>
-  <td>16</td>
+  <td>15</td>
   <td>10</td>
   <td>13</td>
   <td>11</td>
@@ -719,7 +722,7 @@ end
   <td>6</td>
   <td>5</td>
   <td>11</td>
-  <td>19</td>
+  <td>17</td>
   <td>12</td>
   <td>8</td>
   <td>4</td>
@@ -731,11 +734,76 @@ end
 
 
 
-调用 `print_legend(segments, patterns)`（文件位于 `src/process/print_legend.m`）, 输出图例如下：
+调用 `print_legend(segments, patterns, 0.8)`（文件位于 `src/process/print_legend.m`）, 输出图例如下：
 
 ![](report.assets/process/5-print_legend.png)
 
 
 
 我们成功的将每一块图案映射为矩阵中的索引。
+
+
+
+### 6. 设计一个模拟的自动连连看
+
+在上一节中，我们已经得到了图像对应的索引矩阵。因此，我们可以直接使用 `omg.m` 生成消除步骤。
+
+我们定义了函数 `play_simulation(img, segment_locs, game_mat)` 用于演示模拟的自动连连看。`img`, `segment_locs` 和 `game_mat` 分别是游戏图像、调用 `segment_image` 得到的分块位置信息和调用 `map_to_matrix` 得到的索引矩阵。
+
+该函数代码如下，（文件位于 `src/process/play_simulation.m`）
+
+```matlab
+function play_simulation(img, segment_locs, game_mat)
+    addpath('../linkgame');
+    steps = omg(game_mat);
+    figure;
+    ax_game = subplot('Position', [0.05 0.05 0.78 0.9])
+    imshow(img);
+    hold on;
+    ax_pair1 = subplot('Position', [0.85 0.25 0.1 0.2])
+    ax_pair2 = subplot('Position', [0.85 0.55 0.1 0.2])
+    
+    for k = 1:steps(1)
+       locs1 = segment_locs{steps(4*k-2), steps(4*k-1)};
+       locs2 = segment_locs{steps(4*k), steps(4*k+1)};
+       axes(ax_pair1);
+       imshow(img(locs1(2):locs1(2)+locs1(4)-1, ...
+           locs1(1):locs1(1)+locs1(3)-1));
+       axes(ax_pair2);
+       imshow(img(locs2(2):locs2(2)+locs2(4)-1, ...
+           locs2(1):locs2(1)+locs2(3)-1));
+       axes(ax_game);
+       rectangle('Position', locs1, 'EdgeColor','r', 'LineWidth', 2);
+       rectangle('Position', locs2, 'EdgeColor','r', 'LineWidth', 2);
+       pause(1);
+       rectangle('Position', locs1, 'FaceColor','k', 'LineWidth', 2);
+       rectangle('Position', locs2, 'FaceColor','k', 'LineWidth', 2);
+       pause(0.5);
+    end      
+end
+```
+
+该函数会在左侧逐步展示消除过程，并在右侧放大显示当前消除的块，便于检验程序正确性。
+
+
+
+从头开始，完整的调用流程如下：
+
+```matlab
+img = imread('../../resources/process/graycapture.jpg');
+[segments, segment_locs] = segment_image(img, 0.8, 0.3, 10);
+corrs = calc_corrs(segments, 20, 0.35, 5);
+[game_mat, patterns] = map_to_matrix(size(segments), corrs, 0.8);
+play_simulation(img, segment_locs, game_mat);
+```
+
+
+
+效果如下：
+
+![](report.assets/process/6-play_simu_1.png)
+
+![](report.assets/process/6-play_simu_2.png)
+
+![](report.assets/process/6-play_simu_3.png)
 
