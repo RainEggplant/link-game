@@ -470,8 +470,10 @@ for k = 1:numel(segments_hf)-1
 	for m = k+1:numel(segments_hf)
 		img1 = segments_hf{k};
 		img2 = segments_hf{m};
-		img1_s = img1(edge_cut:end-edge_cut, edge_cut:end-edge_cut);
-        img2_s = img2(edge_cut:end-edge_cut, edge_cut:end-edge_cut);
+		[cut_height, cut_width] = round(size(img1)*edge_factor);
+        img1_s = img1(cut_height:end-cut_height, cut_width:end-cut_width);
+        [cut_height, cut_width] = round(size(img2)*edge_factor);
+        img2_s = img2(cut_height:end-cut_height, cut_width:end-cut_width);
         c1 = normxcorr2(img1_s, img2);
         c2 = normxcorr2(img2_s, img1);
 		corrs(idx, :) = [max(max(c1(:)), max(c2(:))), k, m];
@@ -508,31 +510,31 @@ corrs = sortrows(corrs, 'descend');
 
   ![](report.assets/process/3-no_high_pass_filter.png)
 
-  经检查，相关系数最大的前 182 对均正确配对，实际上，这已经涵盖了所有正确的配对。并且，最后一对正确配对与下一对的相关系数为 0.8304 和 0.8002，变化比较陡峭。从相关系数整体来看，区分度也不错。
+  经检查，相关系数最大的前 182 对均正确配对，实际上，这已经涵盖了所有正确的配对。并且，最后一对正确配对与下一对的相关系数为 0.8962 和 0.7857，变化较陡峭。从相关系数整体来看，区分度也不错。
 
   
 
-- `calc_corrs(segments, 20, 0.2, 5)`
+- `calc_corrs(segments, 20, 0.2, 0.1)`
 
   ![](report.assets/process/3-high_pass_0.2_20.png)
 
-  经检查，程序也正确地完成了所有的配对。但是，最后一对正确配对与下一对的相关系数为 0.8742 和 0.8562，变化没有那么陡峭了。从相关系数整体来看，区分度也没有前一种好。
+  经检查，程序也正确地完成了所有的配对。但是，最后一对正确配对与下一对的相关系数为 0.91 和 0.8425，变化没有那么陡峭了。从相关系数整体来看，区分度也没有前一种好。
 
 
 
-- `calc_corrs(segments, 20, 0.35, 5)`
+- `calc_corrs(segments, 20, 0.35, 0.1)`
 
   ![](report.assets/process/3-high_pass_0.35_20.png)
 
-  经检查，程序正确地完成了所有的配对。最后一对正确配对与下一对的相关系数为 0.7448 和 0.6984，变化非常陡峭。从相关系数整体来看，区分度也非常好。
+  经检查，程序正确地完成了所有的配对。最后一对正确配对与下一对的相关系数为 0.8256 和 0.6847，变化非常陡峭。从相关系数整体来看，区分度也非常好。
 
 
 
-- `calc_corrs(segments, 20, 0.5, 5)`
+- `calc_corrs(segments, 20, 0.5, 0.1)`
 
   ![](report.assets/process/3-high_pass_0.5_20.png)
 
-  经检查，前 181 项程序均正确配对，但第 182 项出现了错误。不过从相关系数整体来看，区分度是比较好的。
+  经检查，程序正确地完成了所有的配对。最后一对正确配对与下一对的相关系数为 0.8647 和 0.7922，变化没有那么陡峭了。
 
 
 
@@ -562,9 +564,9 @@ corrs = sortrows(corrs, 'descend');
 
 先前已经通过 GUI 程序得到所有不是同一种精灵的匹配出现在第 182 项以后。故调用 `show_matches(segments, corrs, 182)` 即可输出结果。
 
-![](report.assets/process/3-matches_incorrect.png)
+![](report.assets/process/4-matches_incorrect.png)
 
-看来程序觉得小锯鳄和妙蛙种子长得比较像，这对 CP 十次里出现了 7 次。但从我的主观感受上来看，二者并没有那么像，只是角度比较一致。另外一对 CP 波波和绿毛虫也出现了 3 次，我也觉得他们角度比较一致，然后尾巴处都有一团灰色的东西。
+看来程序觉得小锯鳄和妙蛙种子长得比较像，这对 CP 十次里出现了 5 次。但从我的主观感受上来看，二者并没有那么像，只是角度比较一致。另外一对 CP 波波和绿毛虫也出现了 5 次，我也觉得是因为他们角度比较一致，然后尾巴处都有一团灰色的东西。
 
 
 
@@ -633,114 +635,114 @@ end
 
 <table>
  <tr>
-  <td>8</td>
-  <td>14</td>
-  <td>8</td>
-  <td>3</td>
+  <td>7</td>
   <td>11</td>
-  <td>17</td>
-  <td>6</td>
-  <td>13</td>
-  <td>1</td>
-  <td>5</td>
-  <td>5</td>
-  <td>12</td>
- </tr>
- <tr>
-  <td>9</td>
-  <td>3</td>
-  <td>12</td>
   <td>7</td>
-  <td>12</td>
-  <td>4</td>
-  <td>1</td>
-  <td>16</td>
-  <td>5</td>
-  <td>19</td>
-  <td>18</td>
-  <td>1</td>
- </tr>
- <tr>
-  <td>10</td>
-  <td>2</td>
-  <td>5</td>
-  <td>19</td>
-  <td>7</td>
-  <td>9</td>
-  <td>6</td>
-  <td>7</td>
-  <td>14</td>
-  <td>6</td>
-  <td>10</td>
-  <td>9</td>
- </tr>
- <tr>
-  <td>7</td>
-  <td>2</td>
-  <td>1</td>
-  <td>7</td>
-  <td>14</td>
-  <td>1</td>
-  <td>6</td>
-  <td>3</td>
-  <td>6</td>
-  <td>9</td>
-  <td>7</td>
-  <td>10</td>
- </tr>
- <tr>
-  <td>18</td>
-  <td>14</td>
-  <td>16</td>
-  <td>11</td>
-  <td>2</td>
-  <td>5</td>
-  <td>2</td>
-  <td>5</td>
   <td>4</td>
   <td>13</td>
-  <td>7</td>
-  <td>3</td>
+  <td>18</td>
+  <td>6</td>
+  <td>12</td>
+  <td>1</td>
+  <td>5</td>
+  <td>5</td>
+  <td>14</td>
  </tr>
  <tr>
-  <td>10</td>
+  <td>9</td>
+  <td>4</td>
+  <td>14</td>
+  <td>8</td>
+  <td>14</td>
+  <td>3</td>
   <td>1</td>
   <td>15</td>
-  <td>10</td>
-  <td>8</td>
-  <td>15</td>
-  <td>10</td>
-  <td>13</td>
-  <td>11</td>
-  <td>4</td>
-  <td>13</td>
+  <td>5</td>
+  <td>17</td>
+  <td>19</td>
   <td>1</td>
  </tr>
  <tr>
-  <td>4</td>
+  <td>10</td>
+  <td>2</td>
+  <td>5</td>
+  <td>17</td>
+  <td>8</td>
+  <td>9</td>
+  <td>6</td>
+  <td>8</td>
+  <td>11</td>
+  <td>6</td>
+  <td>10</td>
+  <td>9</td>
+ </tr>
+ <tr>
+  <td>8</td>
+  <td>2</td>
+  <td>1</td>
+  <td>8</td>
+  <td>11</td>
   <td>1</td>
   <td>6</td>
-  <td>5</td>
+  <td>4</td>
+  <td>6</td>
+  <td>9</td>
+  <td>8</td>
+  <td>10</td>
+ </tr>
+ <tr>
+  <td>19</td>
   <td>11</td>
-  <td>17</td>
+  <td>15</td>
+  <td>13</td>
+  <td>2</td>
+  <td>5</td>
+  <td>2</td>
+  <td>5</td>
+  <td>3</td>
   <td>12</td>
   <td>8</td>
   <td>4</td>
-  <td>5</td>
+ </tr>
+ <tr>
+  <td>10</td>
+  <td>1</td>
+  <td>16</td>
+  <td>10</td>
   <td>7</td>
-  <td>4</td>
+  <td>16</td>
+  <td>10</td>
+  <td>12</td>
+  <td>13</td>
+  <td>3</td>
+  <td>12</td>
+  <td>1</td>
+ </tr>
+ <tr>
+  <td>3</td>
+  <td>1</td>
+  <td>6</td>
+  <td>5</td>
+  <td>13</td>
+  <td>18</td>
+  <td>14</td>
+  <td>7</td>
+  <td>3</td>
+  <td>5</td>
+  <td>8</td>
+  <td>3</td>
  </tr>
 </table>
 
 
 
-调用 `print_legend(segments, patterns, 0.8)`（文件位于 `src/process/print_legend.m`）, 输出图例如下：
+调用 `print_legend(segments, patterns)`（文件位于 `src/process/print_legend.m`）, 输出图例如下：
 
 ![](report.assets/process/5-print_legend.png)
 
 
 
-我们成功的将每一块图案映射为矩阵中的索引。
+我们成功地将每一块图案映射为矩阵中的索引。
 
 
 
@@ -807,3 +809,8 @@ play_simulation(img, segment_locs, game_mat);
 
 ![](report.assets/process/6-play_simu_3.png)
 
+
+
+## 选做：设计真实的自动连连看
+
+为了方便起见，我们没有采用题目中提供的

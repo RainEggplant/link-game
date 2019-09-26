@@ -18,8 +18,4 @@ function filter_2d = filter_high_pass(order, freq)
            end
        end
     end
-    
-    % filter_2d = filter_2d + (1-sum(filter_2d(:)))/numel(filter_2d);
-    % img_o = imfilter(img, filter_2d, 'same');
-    % img_o = filter2(filter_2d, img);
 end
