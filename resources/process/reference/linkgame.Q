@@ -48,12 +48,13 @@ If pos <> "-1" Then
 	pos = Plugin.File.ReadLine(file2)
 	y2 = int((ny + 1 - pos) * height + height / 2)
 	MoveTo x1, y1
-	Delay 500
+	Delay 100
 	LeftClick 1
-	Delay 300
+	Delay 200
 	MoveTo x2, y2
-	Delay 500
+	Delay 100
 	LeftClick 1
+  Delay 200
 End If
 
 Call Plugin.File.CloseFile(file2)

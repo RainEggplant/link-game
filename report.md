@@ -392,7 +392,7 @@ function [segments, segment_locs] = segment_image(...
 | MinPeakProminence | 峰值最小的突出程度      |
 | MaxPeakWidth      | 峰值最大的宽度          |
 
-返回值 `segments` 是一个 m$\times$n 维元胞数组，对应分割后的每一块图像。`segment_locs` 为每块图像的位置信息，为 ``[left bottom width height]` ` 形式的四元素向量。
+返回值 `segments` 是一个 m$\times$n 维元胞数组，对应分割后的每一块图像。`segment_locs` 为每块图像的位置信息，为 `[left bottom width height]`  形式的四元素向量。
 
 
 
@@ -794,7 +794,7 @@ end
 ```matlab
 img = imread('../../resources/process/graycapture.jpg');
 [segments, segment_locs] = segment_image(img, 0.8, 0.3, 10);
-corrs = calc_corrs(segments, 20, 0.35, 5);
+corrs = calc_corrs(segments, 20, 0.35, 0.1);
 [game_mat, patterns] = map_to_matrix(size(segments), corrs, 0.8);
 play_simulation(img, segment_locs, game_mat);
 ```
@@ -813,4 +813,104 @@ play_simulation(img, segment_locs, game_mat);
 
 ## 选做：设计真实的自动连连看
 
-为了方便起见，我们没有采用题目中提供的
+### 连接摄像头
+
+我们采用 IP Camera 的方式，用手机作为摄像头。
+
+首先，我们需要安装为 MATLAB 安装硬件支持包 `MATLAB Support Package for IP Cameras` 。同时，我们也需要在手机上安装一款 IP 摄像头软件，我用的是 [这款](https://play.google.com/store/apps/details?id=com.pas.webcam) 。然后，让手机和电脑处于同一局域网下，开启手机的视频流服务。
+
+让我们访问摄像头的址看一看效果：
+
+![](report.assets/process/7-ip_cam.png)
+
+可以看到，我们成功地连接了手机摄像头与电脑。
+
+
+
+### 完成 `user_camera.m`
+
+和老师提供的硬件连接模式不同，由于我们使用的是 IP Camera 的方式，需要能传入摄像头的地址。可惜 `user_camera` 不支持传入参数。因此，我们只好采用全局变量的方式。
+
+在命令行中键入如下命令以完成全局变量的设置：
+
+```matlab
+global cam_ip;
+cam_ip = 'http://192.168.137.120:8080/video'
+```
+
+然后完成 `user_camera.m` :
+
+```matlab
+function realcapture = user_camera()
+    global cam_ip;    % 需要提前在工作区定义全局变量 cam_ip
+    persistent cam;   % cam 是静态变量
+    % 如果空则说明第一次调用本函数，创建新的视频对象，这样做是为了避免重复生成，提高执行速度
+    if isempty(cam)
+        cam = ipcam(cam_ip);
+        pause(5);
+    end
+    realcapture = snapshot(cam);
+    realcapture = rgb2gray(realcapture);
+    width = size(realcapture, 1);
+    realcapture = realcapture(:, 1:round(width*1.32));
+end
+```
+
+注意我们对摄像头获取的图片进行了灰度处理，同时根据窗口的宽高比裁减了图像。使用时，保证窗口的高度充满摄像头的屏幕即可。第一次调用时会等待 5 秒后才拍摄图像，原因是按键精灵调整窗口位置到左上角有延迟。测试时请根据实际情况调整该值，并注意每次测试前重置 persistent 变量。
+
+以上代码位于 `src/linkgame/user_camera.m`, 为了能进行测试，我在 `resources/linkgame` 下建立了符号链接，并将 `user_camera.m` 更名为 `user_camera.m.example` 。
+
+
+
+### 完成 `ai.m`
+
+为了能够充分复用之前的代码，我们仅在游戏开始时读取游戏区域，进行识别与计算。之后每次仅需从以计算好的步骤中返回当前步骤即可（我们使用了 persistent 变量来保证这一功能，注意每次测试前需要重置该变量）。
+
+由于摄像头获取的图像较暗，我们将二值化的阈值从 `0.8` 调整为 `0.6`。同时，需要注意 `step` 中坐标的定义和 `game_mat` 不同，需要额外处理。
+
+```matlab
+function step = ai(realcapture)   
+    addpath('../../src/linkgame');
+    addpath('../../src/process');
+    persistent steps;
+    persistent counter;
+    if isempty(counter)
+        % 第一次调用本函数，读取图片，生成所有消除步骤
+        counter = 1;
+        [segments, segment_locs] = segment_image( ...
+            realcapture, 0.6, 0.3, 10);
+        display(size(segments));
+        corrs = calc_corrs(segments, 20, 0.35, 0.1);
+        [game_mat, patterns] = map_to_matrix( ...
+            size(segments), corrs, 0.8);
+        game_mat = flipud(game_mat);
+        steps = omg(game_mat);
+        display(steps);
+    else
+        counter = counter+1;
+    end
+    
+    if counter <= steps(1)
+        step = steps([counter*4-1, counter*4-2, counter*4+1, counter*4]);
+        display(step);
+    else
+        step = -1;
+        clear counter;
+    end
+end
+```
+
+以上代码位于 `src/linkgame/ai.m`, 为了能进行测试，我在 `resources/linkgame` 下建立了符号链接，并将 `ai.m` 更名为 `ai.m.example` 。
+
+
+
+### 效果
+
+如下（PDF 档无法嵌入 gif）：
+
+![](report.assets/process/7-showtime.gif)
+
+
+
+完整视频请参见项目下的 `showtime.mp4` 。
+

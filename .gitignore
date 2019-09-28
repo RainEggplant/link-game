@@ -36,6 +36,7 @@ resources/linkgame/auto_click.ini
 resources/linkgame/cfgdll.dll
 resources/linkgame/steps.txt
 resources/process/plugin
-resources/process/auto_click.ini
+resources/process/linkgame_auto.ini
 resources/process/cfgdll.dll
-resources/process/steps.txt
+resources/process/step.txt
+resources/process/realcapture.jpg
