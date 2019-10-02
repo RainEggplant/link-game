@@ -863,13 +863,9 @@ end
 
 ### 效果
 
-如下（PDF 档无法嵌入 gif）：
+如下：
 
 ![](report.assets/process/7-showtime.gif)
-
-
-
-完整视频请参见项目下的 `showtime.mp4` 。
 
 
 
